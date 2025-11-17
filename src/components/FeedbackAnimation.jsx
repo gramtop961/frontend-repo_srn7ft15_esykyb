@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { motion, useAnimation } from 'framer-motion'
 import { Sparkles, Gauge, Wand2, Truck } from 'lucide-react'
 
@@ -15,25 +15,9 @@ const rawNotes = [
   'Churn spike after trial',
 ]
 
-function FloatingNote({ text, delay, x, y }){
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.6, ease: 'easeOut' }}
-      className="absolute select-none"
-      style={{ left: x, top: y }}
-    >
-      <div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200 backdrop-blur shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)]">
-        {text}
-      </div>
-    </motion.div>
-  )
-}
-
 export default function FeedbackAnimation() {
   const controls = useAnimation()
-  const cardFocus = useAnimation()
+  const [activeIndex, setActiveIndex] = useState(0)
 
   // Autoplay loop between scatter -> cluster
   useEffect(() => {
@@ -52,24 +36,13 @@ export default function FeedbackAnimation() {
     }
   }, [controls])
 
-  // Pulse focus across theme cards in sequence
+  // Cycle focus across cards
   useEffect(() => {
-    let mounted = true
-    const seq = async () => {
-      while (mounted) {
-        await cardFocus.start({ active: 0 })
-        await new Promise((r) => setTimeout(r, 900))
-        await cardFocus.start({ active: 1 })
-        await new Promise((r) => setTimeout(r, 900))
-        await cardFocus.start({ active: 2 })
-        await new Promise((r) => setTimeout(r, 900))
-      }
-    }
-    seq()
-    return () => {
-      mounted = false
-    }
-  }, [cardFocus])
+    const id = setInterval(() => {
+      setActiveIndex((prev) => (prev + 1) % 3)
+    }, 900)
+    return () => clearInterval(id)
+  }, [])
 
   const variants = {
     scatter: {
@@ -117,7 +90,6 @@ export default function FeedbackAnimation() {
     },
   ]
 
-  // Util classes
   const shimmer =
     'before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/15 before:to-transparent before:animate-[shimmer_2s_infinite]'
 
@@ -147,7 +119,6 @@ export default function FeedbackAnimation() {
           {/* Left: dynamic scatter -> cluster */}
           <div className="relative h-[420px] rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-white/[0.02] overflow-hidden backdrop-blur">
             <div className="absolute inset-0">
-              {/* scattered notes */}
               {rawNotes.map((n, i) => {
                 const x = 20 + ((i * 37) % 520)
                 const y = 20 + ((i * 53) % 320)
@@ -197,14 +168,13 @@ export default function FeedbackAnimation() {
           <div className="grid gap-5">
             {themeCards.map((card, idx) => {
               const Icon = card.icon
+              const isActive = idx === activeIndex
               return (
                 <motion.div
                   key={card.title}
                   initial={{ y: 8, opacity: 0 }}
                   whileInView={{ y: 0, opacity: 1 }}
                   viewport={{ once: true, amount: 0.4 }}
-                  animate={cardFocus}
-                  custom={idx}
                 >
                   {/* Gradient frame */}
                   <div className={`p-[1px] rounded-2xl bg-gradient-to-r ${card.gradient} shadow-[0_20px_80px_-24px_rgba(59,130,246,0.25)]`}>
@@ -223,7 +193,7 @@ export default function FeedbackAnimation() {
 
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className={`h-10 w-10 rounded-xl grid place-items-center bg-gradient-to-br ${card.gradient} text-slate-900`}> 
+                          <div className={`h-10 w-10 rounded-xl grid place-items-center bg-gradient-to-br ${card.gradient} text-slate-900`}>
                             <Icon className="h-5 w-5" />
                           </div>
                           <h3 className="text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-slate-50 to-slate-300">
@@ -234,10 +204,9 @@ export default function FeedbackAnimation() {
                         {/* reactive pulse ring when active */}
                         <motion.div
                           animate={{
-                            boxShadow:
-                              idx === (cardFocus.get() && cardFocus.get().active)
-                                ? '0 0 0 10px rgba(168,85,247,0.10)'
-                                : '0 0 0 0 rgba(168,85,247,0)'
+                            boxShadow: isActive
+                              ? '0 0 0 10px rgba(168,85,247,0.10)'
+                              : '0 0 0 0 rgba(168,85,247,0)'
                           }}
                           transition={{ duration: 0.5 }}
                           className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_24px_2px_rgba(52,211,153,0.6)]"
