@@ -1,4 +1,6 @@
+import NavBar from './components/NavBar'
 import Hero from './components/Hero'
+import FeedbackAnimation from './components/FeedbackAnimation'
 import HowItWorks from './components/HowItWorks'
 import Features from './components/Features'
 import ProductShots from './components/ProductShots'
@@ -8,7 +10,9 @@ import CTA from './components/CTA'
 function App() {
   return (
     <div className="min-h-screen w-full bg-slate-950">
+      <NavBar />
       <Hero />
+      <FeedbackAnimation />
       <HowItWorks />
       <Features />
       <ProductShots />
