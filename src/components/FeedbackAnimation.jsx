@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import { motion, useAnimation } from 'framer-motion'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion, useAnimation, useInView, useReducedMotion } from 'framer-motion'
 import { Sparkles, Gauge, Wand2, Truck } from 'lucide-react'
 
+// Keep the sample small to limit DOM + layout work
 const rawNotes = [
   '“Search is slow on mobile”',
   'Export to CSV please',
@@ -16,33 +17,49 @@ const rawNotes = [
 ]
 
 export default function FeedbackAnimation() {
+  const prefersReduced = useReducedMotion()
   const controls = useAnimation()
   const [activeIndex, setActiveIndex] = useState(0)
 
-  // Autoplay loop between scatter -> cluster
+  // Only animate when the section is in view
+  const sectionRef = useRef(null)
+  const inView = useInView(sectionRef, { margin: '-20% 0px -20% 0px', amount: 0.3 })
+
+  // Precompute positions to avoid recalculation on renders
+  const positions = useMemo(() =>
+    rawNotes.map((_, i) => ({
+      x: 20 + ((i * 37) % 520),
+      y: 20 + ((i * 53) % 320),
+      idx: i,
+    })),
+  [])
+
+  // Scatter <-> cluster loop (paused if reduced motion or not in view)
   useEffect(() => {
+    if (prefersReduced || !inView) return
     let mounted = true
     const loop = async () => {
       while (mounted) {
         await controls.start('cluster')
-        await new Promise((r) => setTimeout(r, 1400))
+        await new Promise((r) => setTimeout(r, 1600)) // slightly slower, fewer keyframes/sec
         await controls.start('scatter')
-        await new Promise((r) => setTimeout(r, 1200))
+        await new Promise((r) => setTimeout(r, 1400))
       }
     }
     loop()
     return () => {
       mounted = false
     }
-  }, [controls])
+  }, [controls, prefersReduced, inView])
 
-  // Cycle focus across cards
+  // Cycle focus across cards (pause when not in view to save work)
   useEffect(() => {
+    if (prefersReduced || !inView) return
     const id = setInterval(() => {
       setActiveIndex((prev) => (prev + 1) % 3)
-    }, 900)
+    }, 1400) // slower cycle
     return () => clearInterval(id)
-  }, [])
+  }, [prefersReduced, inView])
 
   const variants = {
     scatter: {
@@ -51,20 +68,20 @@ export default function FeedbackAnimation() {
       opacity: 1,
       scale: 1,
       rotate: 0,
-      transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] },
+      transition: { duration: 0.75, ease: [0.22, 1, 0.36, 1] },
     },
     cluster: (i) => {
       const col = i % 3
       const row = Math.floor(i / 3)
-      const baseX = [-220, 0, 220][col]
-      const baseY = -80 + row * 40
+      const baseX = [-200, 0, 200][col] // slightly tighter to reduce travel distance
+      const baseY = -70 + row * 38
       return {
         x: baseX,
         y: baseY,
         rotate: 0,
         scale: 1,
         opacity: 1,
-        transition: { duration: 0.9, ease: [0.22, 1, 0.36, 1] },
+        transition: { duration: 0.75, ease: [0.22, 1, 0.36, 1] },
       }
     },
   }
@@ -90,20 +107,22 @@ export default function FeedbackAnimation() {
     },
   ]
 
+  // Use motion-safe so shimmer doesn't run for users who reduce motion
   const shimmer =
-    'before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/15 before:to-transparent before:animate-[shimmer_2s_infinite]'
+    'before:absolute before:inset-0 before:-translate-x-full before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent motion-safe:before:animate-[shimmer_2.4s_infinite]'
 
   return (
-    <section className="relative bg-slate-950 text-white py-24">
+    <section ref={sectionRef} className="relative bg-slate-950 text-white py-24">
+      {/* Background glows downgraded to reduce blur GPU cost */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[720px] w-[720px] rounded-full bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.15),transparent_60%)] blur-3xl" />
-        <div className="absolute top-10 left-10 h-40 w-40 rounded-full bg-purple-500/10 blur-2xl" />
-        <div className="absolute bottom-10 right-10 h-40 w-40 rounded-full bg-amber-400/10 blur-2xl" />
+        <div className="absolute -top-32 left-1/2 -translate-x-1/2 h-[560px] w-[560px] rounded-full bg-[radial-gradient(circle_at_center,rgba(56,189,248,0.12),transparent_60%)] blur-xl" />
+        <div className="absolute top-10 left-10 h-32 w-32 rounded-full bg-purple-500/10 blur-lg" />
+        <div className="absolute bottom-10 right-10 h-32 w-32 rounded-full bg-amber-400/10 blur-lg" />
       </div>
 
       <div className="mx-auto max-w-7xl px-6">
         <div className="text-center max-w-3xl mx-auto">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300 backdrop-blur">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300 backdrop-blur-sm">
             <Sparkles className="h-3.5 w-3.5 text-amber-300" />
             From chaos to clarity
           </div>
@@ -115,29 +134,25 @@ export default function FeedbackAnimation() {
           </p>
         </div>
 
-        <div className="mt-14 grid lg:grid-cols-2 gap-10 items-center">
+        <div className="mt-14 grid lg:grid-cols-2 gap-8 items-center">
           {/* Left: dynamic scatter -> cluster */}
-          <div className="relative h-[420px] rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-white/[0.02] overflow-hidden backdrop-blur">
+          <div className="relative h-[400px] rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.04] to-white/[0.02] overflow-hidden backdrop-blur-sm">
             <div className="absolute inset-0">
-              {rawNotes.map((n, i) => {
-                const x = 20 + ((i * 37) % 520)
-                const y = 20 + ((i * 53) % 320)
-                return (
-                  <motion.div
-                    key={n}
-                    custom={i}
-                    initial="scatter"
-                    animate={controls}
-                    variants={variants}
-                    className="absolute"
-                    style={{ left: x, top: y }}
-                  >
-                    <div className={`rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-slate-100 shadow-[0_12px_40px_-12px_rgba(2,6,23,0.8)] ${shimmer}`}>
-                      {n}
-                    </div>
-                  </motion.div>
-                )
-              })}
+              {positions.map(({ x, y }, i) => (
+                <motion.div
+                  key={i}
+                  custom={i}
+                  initial="scatter"
+                  animate={controls}
+                  variants={variants}
+                  className="absolute will-change-transform"
+                  style={{ left: x, top: y }}
+                >
+                  <div className={`rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-xs text-slate-100 shadow-[0_8px_26px_-12px_rgba(2,6,23,0.7)] ${shimmer}`}>
+                    {rawNotes[i]}
+                  </div>
+                </motion.div>
+              ))}
             </div>
 
             {/* cluster headers */}
@@ -149,22 +164,16 @@ export default function FeedbackAnimation() {
             <div className="absolute top-4 left-0 right-0 grid grid-cols-3 text-center text-xs">
               {['Performance', 'Usability', 'Delivery'].map((h, idx) => (
                 <div key={h} className="flex items-center justify-center gap-2 text-slate-300">
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full bg-gradient-to-r ${themeCards[idx].gradient}`}
-                  />
+                  <span className={`h-1.5 w-1.5 rounded-full bg-gradient-to-r ${themeCards[idx].gradient}`} />
                   <span className="bg-clip-text text-transparent bg-gradient-to-r from-slate-200 to-slate-400">
                     {h}
                   </span>
                 </div>
               ))}
             </div>
-
-            {/* Ambient edge glow */}
-            <div className="pointer-events-none absolute inset-0 rounded-3xl ring-1 ring-inset ring-white/10" />
-            <div className="pointer-events-none absolute -inset-px rounded-[26px] bg-gradient-to-b from-purple-500/10 via-transparent to-amber-400/10 blur-xl" />
           </div>
 
-          {/* Right: elevated theme panels */}
+          {/* Right: elevated theme panels with lighter effects */}
           <div className="grid gap-5">
             {themeCards.map((card, idx) => {
               const Icon = card.icon
@@ -172,25 +181,13 @@ export default function FeedbackAnimation() {
               return (
                 <motion.div
                   key={card.title}
-                  initial={{ y: 8, opacity: 0 }}
+                  initial={{ y: 6, opacity: 0 }}
                   whileInView={{ y: 0, opacity: 1 }}
                   viewport={{ once: true, amount: 0.4 }}
                 >
-                  {/* Gradient frame */}
-                  <div className={`p-[1px] rounded-2xl bg-gradient-to-r ${card.gradient} shadow-[0_20px_80px_-24px_rgba(59,130,246,0.25)]`}>
-                    <motion.div
-                      whileHover={{ y: -6, scale: 1.01 }}
-                      transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-                      className="relative rounded-2xl bg-slate-900/70 backdrop-blur-xl border border-white/10 p-5 overflow-hidden"
-                      style={{
-                        boxShadow:
-                          '0 10px 25px -10px rgba(2,6,23,0.6), 0 40px 80px -40px rgba(168,85,247,0.25)'
-                      }}
-                    >
-                      {/* corner glows */}
-                      <div className="pointer-events-none absolute -top-24 -right-24 h-48 w-48 rounded-full bg-purple-500/10 blur-3xl" />
-                      <div className="pointer-events-none absolute -bottom-24 -left-24 h-48 w-48 rounded-full bg-amber-400/10 blur-3xl" />
-
+                  {/* Thin gradient frame (no heavy shadow anims) */}
+                  <div className={`p-[1px] rounded-2xl bg-gradient-to-r ${card.gradient}`}>
+                    <div className="relative rounded-2xl bg-slate-900/70 backdrop-blur-sm border border-white/10 p-5 overflow-hidden">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
                           <div className={`h-10 w-10 rounded-xl grid place-items-center bg-gradient-to-br ${card.gradient} text-slate-900`}>
@@ -201,15 +198,9 @@ export default function FeedbackAnimation() {
                           </h3>
                         </div>
 
-                        {/* reactive pulse ring when active */}
-                        <motion.div
-                          animate={{
-                            boxShadow: isActive
-                              ? '0 0 0 10px rgba(168,85,247,0.10)'
-                              : '0 0 0 0 rgba(168,85,247,0)'
-                          }}
-                          transition={{ duration: 0.5 }}
-                          className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_24px_2px_rgba(52,211,153,0.6)]"
+                        {/* simple ring opacity instead of boxShadow animation */}
+                        <span
+                          className={`h-2 w-2 rounded-full bg-emerald-400 ${isActive ? 'opacity-100' : 'opacity-50'} transition-opacity duration-300`}
                         />
                       </div>
 
@@ -225,7 +216,7 @@ export default function FeedbackAnimation() {
                         ))}
                       </div>
 
-                      {/* impact bar + tiny bars */}
+                      {/* impact bar + tiny bars (transform-only, no shadows) */}
                       <div className="mt-5">
                         <div className="flex items-center justify-between text-[11px] text-slate-400">
                           <span>Impact</span>
@@ -234,9 +225,9 @@ export default function FeedbackAnimation() {
                         <div className="mt-2 h-2 rounded-full bg-slate-800 overflow-hidden">
                           <motion.div
                             initial={{ width: '0%' }}
-                            whileInView={{ width: ['65%', '72%', '68%'] }}
+                            whileInView={{ width: '68%' }}
                             viewport={{ once: true }}
-                            transition={{ duration: 1.8, ease: 'easeInOut' }}
+                            transition={{ duration: 1.2, ease: 'easeInOut' }}
                             className={`h-full rounded-full bg-gradient-to-r ${card.gradient}`}
                           />
                         </div>
@@ -247,13 +238,13 @@ export default function FeedbackAnimation() {
                               initial={{ height: 4 }}
                               whileInView={{ height: h }}
                               viewport={{ once: true }}
-                              transition={{ duration: 0.6, delay: i * 0.05 }}
+                              transition={{ duration: 0.5, delay: i * 0.04 }}
                               className="w-2 rounded-sm bg-white/10"
                             />
                           ))}
                         </div>
                       </div>
-                    </motion.div>
+                    </div>
                   </div>
                 </motion.div>
               )
